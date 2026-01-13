@@ -87,6 +87,7 @@ int main(int argc, char * argv[])
 {
     const char * inputFilename = NULL;
     const char * outputFilename = NULL;
+    const char * cliOutFile = NULL;
     int requestedDepth = 0;
     int jobs = -1;
     int jpegQuality = DEFAULT_JPEG_QUALITY;
@@ -238,6 +239,9 @@ int main(int argc, char * argv[])
                 return 1;
             }
             imageDimensionLimit = (uint32_t)value;
+        } else if (!strcmp(arg, "--cli-out")) {
+            NEXTARG();
+            cliOutFile = arg;
         } else if (arg[0] == '-') {
             fprintf(stderr, "ERROR: unrecognized option %s\n\n", arg);
             syntax();
@@ -293,6 +297,15 @@ int main(int argc, char * argv[])
         }
     }
 
+    FILE * cliOut = stdout;
+    if (cliOutFile) {
+        cliOut = fopen(cliOutFile, "w");
+        if (!cliOut) {
+            fprintf(stderr, "ERROR: Cannot open file for write: %s\n", cliOutFile);
+            return 1;
+        }
+    }
+
     printf("Decoding with codec '%s' (%d worker thread%s), please wait...\n",
            avifCodecName(codecChoice, AVIF_CODEC_FLAG_CAN_DECODE),
            jobs,
@@ -327,22 +340,22 @@ int main(int argc, char * argv[])
         goto cleanup;
     }
 
-    printf("Image decoded: %s\n", inputFilename);
+    fprintf(cliOut, "Image decoded: %s\n", inputFilename);
     avifContainerDump(decoder);
 
     const avifBool isSequence = decoder->imageCount > 1;
-    printf(" * %" PRIu64 " timescales per second, %2.2f seconds (%" PRIu64 " timescales), %d frame%s\n",
-           decoder->timescale,
-           decoder->duration,
-           decoder->durationInTimescales,
-           decoder->imageCount,
-           (decoder->imageCount == 1) ? "" : "s");
+    fprintf(cliOut, " * %" PRIu64 " timescales per second, %2.2f seconds (%" PRIu64 " timescales), %d frame%s\n",
+            decoder->timescale,
+            decoder->duration,
+            decoder->durationInTimescales,
+            decoder->imageCount,
+            (decoder->imageCount == 1) ? "" : "s");
     if (isSequence) {
-        printf(" * %s Frames: (%u expected frames)\n",
-               (decoder->progressiveState != AVIF_PROGRESSIVE_STATE_UNAVAILABLE) ? "Progressive Image" : "Image Sequence",
-               decoder->imageCount);
+        fprintf(cliOut, " * %s Frames: (%u expected frames)\n",
+                (decoder->progressiveState != AVIF_PROGRESSIVE_STATE_UNAVAILABLE) ? "Progressive Image" : "Image Sequence",
+                decoder->imageCount);
     } else {
-        printf(" * Frame:\n");
+        fprintf(cliOut, " * Frame:\n");
     }
 
     if (iccOverrideFilename) {
@@ -365,14 +378,14 @@ int main(int argc, char * argv[])
             break;
         }
 
-        printf("   * Decoded frame [%d] [pts %2.2f (%" PRIu64 " timescales)] [duration %2.2f (%" PRIu64 " timescales)] [%ux%u]\n",
-               currIndex,
-               decoder->imageTiming.pts,
-               decoder->imageTiming.ptsInTimescales,
-               decoder->imageTiming.duration,
-               decoder->imageTiming.durationInTimescales,
-               decoder->image->width,
-               decoder->image->height);
+        fprintf(cliOut, "   * Decoded frame [%d] [pts %2.2f (%" PRIu64 " timescales)] [duration %2.2f (%" PRIu64 " timescales)] [%ux%u]\n",
+                currIndex,
+                decoder->imageTiming.pts,
+                decoder->imageTiming.ptsInTimescales,
+                decoder->imageTiming.duration,
+                decoder->imageTiming.durationInTimescales,
+                decoder->image->width,
+                decoder->image->height);
         if (infoOnly) {
             ++currIndex;
             if (decodeAllFrames) {
@@ -395,14 +408,14 @@ int main(int argc, char * argv[])
         }
 
         if (ignoreICC && (decoder->image->icc.size > 0)) {
-            printf("[--ignore-icc] Discarding ICC profile.\n");
+            fprintf(cliOut, "[--ignore-icc] Discarding ICC profile.\n");
             // This cannot fail.
             result = avifImageSetProfileICC(decoder->image, NULL, 0);
             assert(result == AVIF_RESULT_OK);
         }
 
         if (iccOverrideFilename) {
-            printf("[--icc] Setting ICC profile: %s\n", iccOverrideFilename);
+            fprintf(cliOut, "[--icc] Setting ICC profile: %s\n", iccOverrideFilename);
             result = avifImageSetProfileICC(decoder->image, iccOverride.data, iccOverride.size);
             if (result != AVIF_RESULT_OK) {
                 fprintf(stderr, "ERROR: Failed to set ICC: %s\n", avifResultToString(result));
@@ -466,6 +479,9 @@ int main(int argc, char * argv[])
     returnCode = 0;
 
 cleanup:
+    if (cliOutFile && cliOut && cliOut != stdout) {
+        fclose(cliOut);
+    }
     if (decoder != NULL) {
         if (returnCode != 0) {
             avifDumpDiagnostics(&decoder->diag);
