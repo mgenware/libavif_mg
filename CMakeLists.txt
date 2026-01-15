@@ -686,21 +686,21 @@ if(AVIF_BUILD_APPS OR (AVIF_BUILD_TESTS AND (AVIF_FUZZTEST OR AVIF_GTEST)))
 endif()
 
 if(AVIF_BUILD_APPS)
-    add_executable(avifenc apps/avifenc.c)
-    if(WIN32)
-        if(MSVC)
-            target_sources(avifenc PRIVATE apps/utf8.manifest)
-        elseif(MINGW)
-            # MinGW doesn't have a manifest tool (mt.exe), so we need to wrap
-            # utf8.manifest in a resource-definition script (.rc file).
-            target_sources(avifenc PRIVATE apps/utf8.rc)
-        endif()
-    endif()
-    if(AVIF_LIB_USE_CXX)
-        set_target_properties(avifenc PROPERTIES LINKER_LANGUAGE "CXX")
-    endif()
-    target_link_libraries(avifenc avif_apps avif avif_enable_warnings)
-    add_executable(avifdec apps/avifdec.c)
+    # add_executable(avifenc apps/avifenc.c)
+    # if(WIN32)
+    #     if(MSVC)
+    #         target_sources(avifenc PRIVATE apps/utf8.manifest)
+    #     elseif(MINGW)
+    #         # MinGW doesn't have a manifest tool (mt.exe), so we need to wrap
+    #         # utf8.manifest in a resource-definition script (.rc file).
+    #         target_sources(avifenc PRIVATE apps/utf8.rc)
+    #     endif()
+    # endif()
+    # if(AVIF_LIB_USE_CXX)
+    #     set_target_properties(avifenc PROPERTIES LINKER_LANGUAGE "CXX")
+    # endif()
+    # target_link_libraries(avifenc avif_apps avif avif_enable_warnings)
+    add_library(avifdec apps/avifdec.c)
     if(WIN32)
         if(MSVC)
             target_sources(avifdec PRIVATE apps/utf8.manifest)
@@ -715,37 +715,41 @@ if(AVIF_BUILD_APPS)
 
     include(LocalLibargparse)
 
-    set(AVIFGAINMAPUTIL_SRCS
-        apps/avifgainmaputil/avifgainmaputil.cc
-        apps/avifgainmaputil/convert_command.cc
-        apps/avifgainmaputil/combine_command.cc
-        apps/avifgainmaputil/extractgainmap_command.cc
-        apps/avifgainmaputil/imageio.cc
-        apps/avifgainmaputil/printmetadata_command.cc
-        apps/avifgainmaputil/tonemap_command.cc
-        apps/avifgainmaputil/program_command.cc
-        apps/avifgainmaputil/swapbase_command.cc
-    )
+    # set(AVIFGAINMAPUTIL_SRCS
+    #     apps/avifgainmaputil/avifgainmaputil.cc
+    #     apps/avifgainmaputil/convert_command.cc
+    #     apps/avifgainmaputil/combine_command.cc
+    #     apps/avifgainmaputil/extractgainmap_command.cc
+    #     apps/avifgainmaputil/imageio.cc
+    #     apps/avifgainmaputil/printmetadata_command.cc
+    #     apps/avifgainmaputil/tonemap_command.cc
+    #     apps/avifgainmaputil/program_command.cc
+    #     apps/avifgainmaputil/swapbase_command.cc
+    # )
 
-    add_executable(avifgainmaputil "${AVIFGAINMAPUTIL_SRCS}")
-    if(WIN32)
-        if(MSVC)
-            target_sources(avifgainmaputil PRIVATE apps/utf8.manifest)
-        elseif(MINGW)
-            target_sources(avifgainmaputil PRIVATE apps/utf8.rc)
-        endif()
-    endif()
-    set_target_properties(avifgainmaputil PROPERTIES LINKER_LANGUAGE "CXX")
-    target_link_libraries(avifgainmaputil libargparse avif_apps avif avif_enable_warnings)
+    # add_executable(avifgainmaputil "${AVIFGAINMAPUTIL_SRCS}")
+    # if(WIN32)
+    #     if(MSVC)
+    #         target_sources(avifgainmaputil PRIVATE apps/utf8.manifest)
+    #     elseif(MINGW)
+    #         target_sources(avifgainmaputil PRIVATE apps/utf8.rc)
+    #     endif()
+    # endif()
+    # set_target_properties(avifgainmaputil PROPERTIES LINKER_LANGUAGE "CXX")
+    # target_link_libraries(avifgainmaputil libargparse avif_apps avif avif_enable_warnings)
 
-    if(NOT SKIP_INSTALL_APPS AND NOT SKIP_INSTALL_ALL)
-        install(
-            TARGETS avifenc avifdec avifgainmaputil
-            RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
-            ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-            LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-        )
-    endif()
+    # if(NOT SKIP_INSTALL_APPS AND NOT SKIP_INSTALL_ALL)
+    #     install(
+    #         TARGETS avifenc avifdec avifgainmaputil
+    #         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    #         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    #         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    #     )
+    # endif()
+    install(TARGETS avifdec
+        RUNTIME DESTINATION $ENV{KU_DIST_DIR}/bin
+        LIBRARY DESTINATION $ENV{KU_DIST_LIB_DIR}
+        ARCHIVE DESTINATION $ENV{KU_DIST_LIB_DIR})
 endif()
 
 if(AVIF_BUILD_TESTS)
