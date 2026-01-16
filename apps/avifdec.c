@@ -340,7 +340,7 @@ int avifdec_main(int argc, char * argv[])
         goto cleanup;
     }
 
-    fprintf(cliOut, "Image decoded: %s\n", inputFilename);
+    // fprintf(cliOut, "Image decoded: %s\n", inputFilename);
     avifContainerDump(decoder, cliOut);
 
     const avifBool isSequence = decoder->imageCount > 1;
