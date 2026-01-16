@@ -55,7 +55,7 @@ static void syntax(void)
     avifPrintVersions();
 }
 
-avifBool avifWriteToFile(avifAppFileFormat outputFormat,
+static avifBool avifWriteToFile(avifAppFileFormat outputFormat,
                          const char * outputFilename,
                          avifImage * image,
                          avifBool rawColor,
@@ -83,7 +83,7 @@ avifBool avifWriteToFile(avifAppFileFormat outputFormat,
     }
 }
 
-int avifdec_main(int argc, char * argv[])
+static int avifdec_main(int argc, char * argv[])
 {
     const char * inputFilename = NULL;
     const char * outputFilename = NULL;
