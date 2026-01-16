@@ -97,9 +97,9 @@ static void avifImageDumpInternal(const avifImage * avif, uint32_t gridCols, uin
     }
 
     if (avif->transformFlags == AVIF_TRANSFORM_NONE) {
-        printf(" * Transformations: None\n");
+        fprintf(f, " * Transformations: None\n");
     } else {
-        printf(" * Transformations:\n");
+        fprintf(f, " * Transformations:\n");
 
         if (avif->transformFlags & AVIF_TRANSFORM_PASP) {
             fprintf(f, "    * pasp (Aspect Ratio)  : %d/%d\n", (int)avif->pasp.hSpacing, (int)avif->pasp.vSpacing);
