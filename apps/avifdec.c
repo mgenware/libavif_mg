@@ -341,7 +341,7 @@ int avifdec_main(int argc, char * argv[])
     }
 
     fprintf(cliOut, "Image decoded: %s\n", inputFilename);
-    avifContainerDump(decoder);
+    avifContainerDump(decoder, cliOut);
 
     const avifBool isSequence = decoder->imageCount > 1;
     fprintf(cliOut, " * %" PRIu64 " timescales per second, %2.2f seconds (%" PRIu64 " timescales), %d frame%s\n",
@@ -479,14 +479,15 @@ int avifdec_main(int argc, char * argv[])
     returnCode = 0;
 
 cleanup:
-    if (cliOutFile && cliOut && cliOut != stdout) {
-        fclose(cliOut);
-    }
     if (decoder != NULL) {
         if (returnCode != 0) {
-            avifDumpDiagnostics(&decoder->diag);
+            avifDumpDiagnostics(&decoder->diag, cliOut);
         }
         avifDecoderDestroy(decoder);
+    }
+
+    if (cliOutFile && cliOut && cliOut != stdout) {
+        fclose(cliOut);
     }
     avifRWDataFree(&iccOverride);
     return returnCode;

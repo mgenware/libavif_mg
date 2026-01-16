@@ -46,20 +46,20 @@ static int64_t calcGCD(int64_t a, int64_t b)
     return a;
 }
 
-static void printClapFraction(const char * name, int32_t n, int32_t d)
+static void printClapFraction(FILE * f, const char * name, int32_t n, int32_t d)
 {
-    printf("%s: %d/%d", name, n, d);
+    fprintf(f, "%s: %d/%d", name, n, d);
     if (d != 0) {
         int64_t gcd = calcGCD(n, d);
         if (gcd > 1) {
             int32_t rn = (int32_t)(n / gcd);
             int32_t rd = (int32_t)(d / gcd);
-            printf(" (%d/%d)", rn, rd);
+            fprintf(f, " (%d/%d)", rn, rd);
         }
     }
 }
 
-static void avifImageDumpInternal(const avifImage * avif, uint32_t gridCols, uint32_t gridRows, avifBool alphaPresent, avifProgressiveState progressiveState)
+static void avifImageDumpInternal(const avifImage * avif, uint32_t gridCols, uint32_t gridRows, avifBool alphaPresent, avifProgressiveState progressiveState, FILE * f)
 {
     uint32_t width = avif->width;
     uint32_t height = avif->height;
@@ -67,33 +67,33 @@ static void avifImageDumpInternal(const avifImage * avif, uint32_t gridCols, uin
         width *= gridCols;
         height *= gridRows;
     }
-    printf(" * Resolution     : %ux%u\n", width, height);
-    printf(" * Bit Depth      : %u\n", avif->depth);
-    printf(" * Format         : %s\n", avifPixelFormatToString(avif->yuvFormat));
+    fprintf(f, " * Resolution     : %ux%u\n", width, height);
+    fprintf(f, " * Bit Depth      : %u\n", avif->depth);
+    fprintf(f, " * Format         : %s\n", avifPixelFormatToString(avif->yuvFormat));
     if (avif->yuvFormat == AVIF_PIXEL_FORMAT_YUV420) {
-        printf(" * Chroma Sam. Pos: %u\n", avif->yuvChromaSamplePosition);
+        fprintf(f, " * Chroma Sam. Pos: %u\n", avif->yuvChromaSamplePosition);
     }
-    printf(" * Alpha          : %s\n", alphaPresent ? (avif->alphaPremultiplied ? "Premultiplied" : "Not premultiplied") : "Absent");
-    printf(" * Range          : %s\n", (avif->yuvRange == AVIF_RANGE_FULL) ? "Full" : "Limited");
+    fprintf(f, " * Alpha          : %s\n", alphaPresent ? (avif->alphaPremultiplied ? "Premultiplied" : "Not premultiplied") : "Absent");
+    fprintf(f, " * Range          : %s\n", (avif->yuvRange == AVIF_RANGE_FULL) ? "Full" : "Limited");
 
-    printf(" * Color Primaries: %u\n", avif->colorPrimaries);
-    printf(" * Transfer Char. : %u\n", avif->transferCharacteristics);
-    printf(" * Matrix Coeffs. : %u\n", avif->matrixCoefficients);
+    fprintf(f, " * Color Primaries: %u\n", avif->colorPrimaries);
+    fprintf(f, " * Transfer Char. : %u\n", avif->transferCharacteristics);
+    fprintf(f, " * Matrix Coeffs. : %u\n", avif->matrixCoefficients);
 
     if (avif->icc.size != 0) {
-        printf(" * ICC Profile    : Present (%" AVIF_FMT_ZU " bytes)\n", avif->icc.size);
+        fprintf(f, " * ICC Profile    : Present (%" AVIF_FMT_ZU " bytes)\n", avif->icc.size);
     } else {
-        printf(" * ICC Profile    : Absent\n");
+        fprintf(f, " * ICC Profile    : Absent\n");
     }
     if (avif->xmp.size != 0) {
-        printf(" * XMP Metadata   : Present (%" AVIF_FMT_ZU " bytes)\n", avif->xmp.size);
+        fprintf(f, " * XMP Metadata   : Present (%" AVIF_FMT_ZU " bytes)\n", avif->xmp.size);
     } else {
-        printf(" * XMP Metadata   : Absent\n");
+        fprintf(f, " * XMP Metadata   : Absent\n");
     }
     if (avif->exif.size != 0) {
-        printf(" * Exif Metadata  : Present (%" AVIF_FMT_ZU " bytes)\n", avif->exif.size);
+        fprintf(f, " * Exif Metadata  : Present (%" AVIF_FMT_ZU " bytes)\n", avif->exif.size);
     } else {
-        printf(" * Exif Metadata  : Absent\n");
+        fprintf(f, " * Exif Metadata  : Absent\n");
     }
 
     if (avif->transformFlags == AVIF_TRANSFORM_NONE) {
@@ -102,50 +102,50 @@ static void avifImageDumpInternal(const avifImage * avif, uint32_t gridCols, uin
         printf(" * Transformations:\n");
 
         if (avif->transformFlags & AVIF_TRANSFORM_PASP) {
-            printf("    * pasp (Aspect Ratio)  : %d/%d\n", (int)avif->pasp.hSpacing, (int)avif->pasp.vSpacing);
+            fprintf(f, "    * pasp (Aspect Ratio)  : %d/%d\n", (int)avif->pasp.hSpacing, (int)avif->pasp.vSpacing);
         }
         if (avif->transformFlags & AVIF_TRANSFORM_CLAP) {
-            printf("    * clap (Clean Aperture): ");
-            printClapFraction("W", (int32_t)avif->clap.widthN, (int32_t)avif->clap.widthD);
-            printf(", ");
-            printClapFraction("H", (int32_t)avif->clap.heightN, (int32_t)avif->clap.heightD);
-            printf(", ");
-            printClapFraction("hOff", (int32_t)avif->clap.horizOffN, (int32_t)avif->clap.horizOffD);
-            printf(", ");
-            printClapFraction("vOff", (int32_t)avif->clap.vertOffN, (int32_t)avif->clap.vertOffD);
-            printf("\n");
+                fprintf(f, "    * clap (Clean Aperture): ");
+                printClapFraction(f, "W", (int32_t)avif->clap.widthN, (int32_t)avif->clap.widthD);
+                fprintf(f, ", ");
+                printClapFraction(f, "H", (int32_t)avif->clap.heightN, (int32_t)avif->clap.heightD);
+                fprintf(f, ", ");
+                printClapFraction(f, "hOff", (int32_t)avif->clap.horizOffN, (int32_t)avif->clap.horizOffD);
+                fprintf(f, ", ");
+                printClapFraction(f, "vOff", (int32_t)avif->clap.vertOffN, (int32_t)avif->clap.vertOffD);
+                fprintf(f, "\n");
 
             avifCropRect cropRect;
             avifDiagnostics diag;
             avifDiagnosticsClearError(&diag);
             avifBool validClap = avifCropRectFromCleanApertureBox(&cropRect, &avif->clap, avif->width, avif->height, &diag);
             if (validClap) {
-                printf("      * Valid, derived crop rect: X: %d, Y: %d, W: %d, H: %d%s\n",
+                fprintf(f, "      * Valid, derived crop rect: X: %d, Y: %d, W: %d, H: %d%s\n",
                        cropRect.x,
                        cropRect.y,
                        cropRect.width,
                        cropRect.height,
                        avifCropRectRequiresUpsampling(&cropRect, avif->yuvFormat) ? " (upsample before cropping)" : "");
             } else {
-                printf("      * Invalid: %s\n", diag.error);
+                fprintf(f, "      * Invalid: %s\n", diag.error);
             }
         }
         if (avif->transformFlags & AVIF_TRANSFORM_IROT) {
-            printf("    * irot (Rotation)      : %u\n", avif->irot.angle);
+            fprintf(f, "    * irot (Rotation)      : %u\n", avif->irot.angle);
         }
         if (avif->transformFlags & AVIF_TRANSFORM_IMIR) {
-            printf("    * imir (Mirror)        : %u (%s)\n", avif->imir.axis, (avif->imir.axis == 0) ? "top-to-bottom" : "left-to-right");
+            fprintf(f, "    * imir (Mirror)        : %u (%s)\n", avif->imir.axis, (avif->imir.axis == 0) ? "top-to-bottom" : "left-to-right");
         }
     }
-    printf(" * Progressive    : %s\n", avifProgressiveStateToString(progressiveState));
+    fprintf(f, " * Progressive    : %s\n", avifProgressiveStateToString(progressiveState));
     if (avif->clli.maxCLL > 0 || avif->clli.maxPALL > 0) {
-        printf(" * CLLI           : %hu, %hu\n", avif->clli.maxCLL, avif->clli.maxPALL);
+        fprintf(f, " * CLLI           : %hu, %hu\n", avif->clli.maxCLL, avif->clli.maxPALL);
     }
 
-    printf(" * Gain map       : ");
+    fprintf(f, " * Gain map       : ");
     avifImage * gainMapImage = avif->gainMap ? avif->gainMap->image : NULL;
     if (gainMapImage != NULL) {
-        printf("%ux%u pixels, %u bit, %s, %s Range, Matrix Coeffs. %u, Base Headroom %.2f (%s), Alternate Headroom %.2f (%s)\n",
+        fprintf(f, "%ux%u pixels, %u bit, %s, %s Range, Matrix Coeffs. %u, Base Headroom %.2f (%s), Alternate Headroom %.2f (%s)\n",
                gainMapImage->width,
                gainMapImage->height,
                gainMapImage->depth,
@@ -159,53 +159,53 @@ static void avifImageDumpInternal(const avifImage * avif, uint32_t gridCols, uin
                    ? 0
                    : (double)avif->gainMap->alternateHdrHeadroom.n / avif->gainMap->alternateHdrHeadroom.d,
                (avif->gainMap->alternateHdrHeadroom.n == 0) ? "SDR" : "HDR");
-        printf(" * Alternate image:\n");
-        printf("    * Color Primaries: %u\n", avif->gainMap->altColorPrimaries);
-        printf("    * Transfer Char. : %u\n", avif->gainMap->altTransferCharacteristics);
-        printf("    * Matrix Coeffs. : %u\n", avif->gainMap->altMatrixCoefficients);
+        fprintf(f, " * Alternate image:\n");
+        fprintf(f, "    * Color Primaries: %u\n", avif->gainMap->altColorPrimaries);
+        fprintf(f, "    * Transfer Char. : %u\n", avif->gainMap->altTransferCharacteristics);
+        fprintf(f, "    * Matrix Coeffs. : %u\n", avif->gainMap->altMatrixCoefficients);
         if (avif->gainMap->altICC.size != 0) {
-            printf("    * ICC Profile    : Present (%" AVIF_FMT_ZU " bytes)\n", avif->gainMap->altICC.size);
+            fprintf(f, "    * ICC Profile    : Present (%" AVIF_FMT_ZU " bytes)\n", avif->gainMap->altICC.size);
         } else {
-            printf("    * ICC Profile    : Absent\n");
+            fprintf(f, "    * ICC Profile    : Absent\n");
         }
         if (avif->gainMap->altDepth) {
-            printf("    * Bit Depth      : %u\n", avif->gainMap->altDepth);
+            fprintf(f, "    * Bit Depth      : %u\n", avif->gainMap->altDepth);
         }
         if (avif->gainMap->altPlaneCount) {
-            printf("    * Planes         : %u\n", avif->gainMap->altPlaneCount);
+            fprintf(f, "    * Planes         : %u\n", avif->gainMap->altPlaneCount);
         }
         if (avif->gainMap->altCLLI.maxCLL > 0 || avif->gainMap->altCLLI.maxPALL > 0) {
-            printf("    * CLLI           : %hu, %hu\n", avif->gainMap->altCLLI.maxCLL, avif->gainMap->altCLLI.maxPALL);
+            fprintf(f, "    * CLLI           : %hu, %hu\n", avif->gainMap->altCLLI.maxCLL, avif->gainMap->altCLLI.maxPALL);
         }
-        printf("\n");
+        fprintf(f, "\n");
     } else if (avif->gainMap != NULL) {
-        printf("Present (but ignored)\n");
+        fprintf(f, "Present (but ignored)\n");
     } else {
-        printf("Absent\n");
+        fprintf(f, "Absent\n");
     }
 }
 
-void avifImageDump(const avifImage * avif, uint32_t gridCols, uint32_t gridRows, avifProgressiveState progressiveState)
+void avifImageDump(const avifImage * avif, uint32_t gridCols, uint32_t gridRows, avifProgressiveState progressiveState, FILE * f)
 {
     const avifBool alphaPresent = avif->alphaPlane && (avif->alphaRowBytes > 0);
-    avifImageDumpInternal(avif, gridCols, gridRows, alphaPresent, progressiveState);
+    avifImageDumpInternal(avif, gridCols, gridRows, alphaPresent, progressiveState, f);
 }
 
-void avifContainerDump(const avifDecoder * decoder)
+void avifContainerDump(const avifDecoder * decoder, FILE * f)
 {
-    avifImageDumpInternal(decoder->image, 0, 0, decoder->alphaPresent, decoder->progressiveState);
+    avifImageDumpInternal(decoder->image, 0, 0, decoder->alphaPresent, decoder->progressiveState, f);
     if (decoder->imageSequenceTrackPresent) {
         if (decoder->repetitionCount == AVIF_REPETITION_COUNT_INFINITE) {
-            printf(" * Repeat Count   : Infinite\n");
+            fprintf(f, " * Repeat Count   : Infinite\n");
         } else if (decoder->repetitionCount == AVIF_REPETITION_COUNT_UNKNOWN) {
-            printf(" * Repeat Count   : Unknown\n");
+            fprintf(f, " * Repeat Count   : Unknown\n");
         } else {
-            printf(" * Repeat Count   : %d\n", decoder->repetitionCount);
+            fprintf(f, " * Repeat Count   : %d\n", decoder->repetitionCount);
         }
     }
 }
 
-void avifPrintVersions(void)
+void avifPrintVersions()
 {
     char codecVersions[256];
     avifCodecVersions(codecVersions);
@@ -401,14 +401,14 @@ void avifImageFixXMP(avifImage * image)
     }
 }
 
-void avifDumpDiagnostics(const avifDiagnostics * diag)
+void avifDumpDiagnostics(const avifDiagnostics * diag, FILE * f)
 {
     if (!*diag->error) {
         return;
     }
 
-    printf("Diagnostics:\n");
-    printf(" * %s\n", diag->error);
+    fprintf(f, "Diagnostics:\n");
+    fprintf(f, " * %s\n", diag->error);
 }
 
 // ---------------------------------------------------------------------------
