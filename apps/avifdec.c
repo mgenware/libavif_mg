@@ -83,7 +83,7 @@ static avifBool avifWriteToFile(avifAppFileFormat outputFormat,
     }
 }
 
-static int avifdec_main(int argc, char * argv[])
+int avifdec_main(int argc, char * argv[])
 {
     const char * inputFilename = NULL;
     const char * outputFilename = NULL;
