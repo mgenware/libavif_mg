@@ -10,6 +10,9 @@ inputs:
   codec-rav1e:
     description: "Can take the values: OFF, LOCAL, SYSTEM"
     default: "OFF"
+  codec-svt:
+    description: "Can take the values: OFF, LOCAL, SYSTEM"
+    default: "OFF"
   extra-cache-key:
     description: "Extra cache key to use in the cache name. Useful when several caches are used in one workflow."
     default: ""
@@ -42,11 +45,15 @@ runs:
 
     - name: Install libaom library
       if: ${{ inputs.codec-aom == 'SYSTEM' }}
-      run: echo "AVIF_WIN_LIBRARIES=${{ env.AVIF_WIN_LIBRARIES }} aom" >> "$GITHUB_ENV"
+      run: echo "AVIF_WIN_LIBRARIES=aom" >> "$GITHUB_ENV"
       shell: bash
     - name: Install libdav1d library
       if: ${{ inputs.codec-dav1d == 'SYSTEM' }}
       run: echo "AVIF_WIN_LIBRARIES=${{ env.AVIF_WIN_LIBRARIES }} dav1d" >> "$GITHUB_ENV"
+      shell: bash
+    - name: Install SVT-AV1 library
+      if: ${{ inputs.codec-svt == 'SYSTEM' }}
+      run: echo "AVIF_WIN_LIBRARIES=${{ env.AVIF_WIN_LIBRARIES }} svt-av1" >> "$GITHUB_ENV"
       shell: bash
     - name: Install libjpeg-turbo library
       if: ${{ inputs.libjpeg-turbo == 'SYSTEM' }}
@@ -98,14 +105,15 @@ runs:
         mv ${{ github.workspace }}\tmp\rav1e-windows-msvc-sdk\lib\pkgconfig\* ${{ github.workspace }}\vcpkg\installed\x64-windows-release\lib\pkgconfig
       shell: pwsh
 
-    - uses: ./.github/actions/setup-common
-      with:
-        codec-aom: ${{ inputs.codec-aom }}
-        codec-dav1d: ${{ inputs.codec-dav1d }}
-        codec-rav1e: ${{ inputs.codec-rav1e }}
     - uses: ./.github/actions/cache
       id: cache
       with:
         extra-key: ${{ inputs.extra-cache-key }}
         use-meson: ${{ inputs.codec-dav1d == 'LOCAL' }}
         use-rust: ${{ inputs.codec-rav1e == 'LOCAL' }}
+    - uses: ./.github/actions/setup-common
+      with:
+        codec-aom: ${{ inputs.codec-aom }}
+        codec-dav1d: ${{ inputs.codec-dav1d }}
+        codec-rav1e: ${{ inputs.codec-rav1e }}
+        codec-svt: ${{ inputs.codec-svt }}

@@ -138,6 +138,8 @@ static avifBool avifExtractExifAndXMP(png_structp png, png_infop info, avifBool 
             // It is easier to set it to 1 (the default top-left) than actually removing the tag.
             // libheif has the same behavior, see
             // https://github.com/strukturag/libheif/blob/18291ddebc23c924440a8a3c9a7267fe3beb5901/examples/heif_enc.cc#L703
+            // However note that some software does use Exif orientation, e.g. Chrome, see also
+            // https://github.com/AOMediaCodec/libavif/issues/3070
             // Ignore errors because not being able to set Exif orientation now means it cannot be parsed later either.
             (void)avifSetExifOrientation(&avif->exif, 1);
             *ignoreExif = AVIF_TRUE; // Ignore any other Exif chunk.
@@ -627,8 +629,8 @@ avifBool avifPNGWrite(const char * outputFilename, const avifImage * avif, uint3
     png_bytep * volatile rowPointers = NULL;
     FILE * volatile f = NULL;
 
-    avifRGBImage rgb;
-    memset(&rgb, 0, sizeof(avifRGBImage));
+    avifRGBImage rgbData;
+    memset(&rgbData, 0, sizeof(avifRGBImage));
 
     volatile int rgbDepth = requestedDepth;
     if (rgbDepth == 0) {
@@ -651,35 +653,48 @@ avifBool avifPNGWrite(const char * outputFilename, const avifImage * avif, uint3
         rgbDepth = 8;
     }
 
-    volatile avifBool monochrome8bit = (avif->yuvFormat == AVIF_PIXEL_FORMAT_YUV400) && !avif->alphaPlane && (avif->depth == 8) &&
-                                       (rgbDepth == 8);
+    volatile avifBool hasTransforms = avif->transformFlags & (AVIF_TRANSFORM_CLAP | AVIF_TRANSFORM_IROT | AVIF_TRANSFORM_IMIR);
+    volatile avifBool copyYPlane = (avif->yuvFormat == AVIF_PIXEL_FORMAT_YUV400) && !avif->alphaPlane && (avif->depth == 8) &&
+                                   (rgbDepth == 8) && !hasTransforms;
 
     volatile int colorType;
-    if (monochrome8bit) {
+    if (copyYPlane) {
         colorType = PNG_COLOR_TYPE_GRAY;
     } else {
-        avifRGBImageSetDefaults(&rgb, avif);
-        rgb.depth = rgbDepth;
+        avifRGBImageSetDefaults(&rgbData, avif);
+        rgbData.depth = rgbDepth;
         if (avif->yuvFormat == AVIF_PIXEL_FORMAT_YUV400 && avif->alphaPlane) {
             colorType = PNG_COLOR_TYPE_GRAY_ALPHA;
-            rgb.format = AVIF_RGB_FORMAT_GRAYA;
+            rgbData.format = AVIF_RGB_FORMAT_GRAYA;
         } else if (avif->yuvFormat == AVIF_PIXEL_FORMAT_YUV400 && !avif->alphaPlane) {
             colorType = PNG_COLOR_TYPE_GRAY;
-            rgb.format = AVIF_RGB_FORMAT_GRAY;
+            rgbData.format = AVIF_RGB_FORMAT_GRAY;
         } else {
-            rgb.chromaUpsampling = chromaUpsampling;
+            rgbData.chromaUpsampling = chromaUpsampling;
             colorType = PNG_COLOR_TYPE_RGBA;
             if (avifImageIsOpaque(avif)) {
                 colorType = PNG_COLOR_TYPE_RGB;
-                rgb.format = AVIF_RGB_FORMAT_RGB;
+                rgbData.format = AVIF_RGB_FORMAT_RGB;
             }
         }
-        if (avifRGBImageAllocatePixels(&rgb) != AVIF_RESULT_OK) {
+        if (avifRGBImageAllocatePixels(&rgbData) != AVIF_RESULT_OK) {
             fprintf(stderr, "Conversion to RGB failed: %s (out of memory)\n", outputFilename);
             goto cleanup;
         }
-        if (avifImageYUVToRGB(avif, &rgb) != AVIF_RESULT_OK) {
+        if (avifImageYUVToRGB(avif, &rgbData) != AVIF_RESULT_OK) {
             fprintf(stderr, "Conversion to RGB failed: %s\n", outputFilename);
+            goto cleanup;
+        }
+    }
+
+    // rgbView is a view on rgbData. avifApplyTransforms() may modify rgbData.
+    avifRGBImage rgbView = rgbData;
+    avifResult transformResult = avifApplyTransforms(&rgbView, &rgbData, avif);
+    if (transformResult != AVIF_RESULT_OK) {
+        if (transformResult == AVIF_RESULT_INVALID_ARGUMENT) {
+            fprintf(stderr, "Warning, ignoring invalid transforms (clap/irot/imir)\n");
+        } else {
+            fprintf(stderr, "Failed to apply transforms: %s\n", avifResultToString(transformResult));
             goto cleanup;
         }
     }
@@ -721,7 +736,10 @@ avifBool avifPNGWrite(const char * outputFilename, const avifImage * avif, uint3
         png_set_compression_level(png, compressionLevel);
     }
 
-    png_set_IHDR(png, info, avif->width, avif->height, rgbDepth, colorType, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+    volatile uint32_t width = copyYPlane ? avif->width : rgbView.width;
+    volatile uint32_t height = copyYPlane ? avif->height : rgbView.height;
+
+    png_set_IHDR(png, info, width, height, rgbDepth, colorType, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
     const avifBool hasIcc = avif->icc.data && (avif->icc.size > 0);
     if (hasIcc) {
@@ -767,7 +785,28 @@ avifBool avifPNGWrite(const char * outputFilename, const avifImage * avif, uint3
             fprintf(stderr, "Error writing PNG: Exif metadata is too big\n");
             goto cleanup;
         }
-        png_set_eXIf_1(png, info, (png_uint_32)avif->exif.size, avif->exif.data);
+        // Make a copy of the Exif data to avoid modifying the input image when setting orientation.
+        avifRWData exif = { NULL, 0 };
+        if (avifRWDataRealloc(&exif, avif->exif.size) != AVIF_RESULT_OK) {
+            fprintf(stderr, "Error writing PNG metadata: out of memory\n");
+            goto cleanup;
+        }
+        memcpy(exif.data, avif->exif.data, avif->exif.size);
+        // We already rotated the pixels if necessary in avifApplyTransforms(), so we set the orientation to 1 (no rotation, no mirror).
+        avifResult result = avifSetExifOrientation(&exif, 1);
+        if (result != AVIF_RESULT_OK) {
+            if (result == AVIF_RESULT_INVALID_EXIF_PAYLOAD || result == AVIF_RESULT_NOT_IMPLEMENTED) {
+                // Either the Exif is invalid, or it doesn't have an orientation field.
+                // If it's invalid, we can consider it as equivalent to not having an orientation.
+                // In both cases, we can ignore the error.
+            } else {
+                fprintf(stderr, "Error writing PNG metadata: %s\n", avifResultToString(result));
+                avifRWDataFree(&exif);
+                goto cleanup;
+            }
+        }
+        png_set_eXIf_1(png, info, (png_uint_32)exif.size, exif.data);
+        avifRWDataFree(&exif);
     }
     if (avif->xmp.data && (avif->xmp.size > 0)) {
         // The iTXt XMP payload may not contain a zero byte according to section 4.2.3.3 of
@@ -811,44 +850,23 @@ avifBool avifPNGWrite(const char * outputFilename, const avifImage * avif, uint3
         png_write_chunk(png, cicp, cicpData, 4);
     }
 
-    rowPointers = (png_bytep *)malloc(sizeof(png_bytep) * avif->height);
+    rowPointers = (png_bytep *)malloc(sizeof(png_bytep) * height);
     if (rowPointers == NULL) {
         fprintf(stderr, "Error writing PNG: memory allocation failure");
         goto cleanup;
     }
     uint8_t * row;
     uint32_t rowBytes;
-    if (monochrome8bit) {
+    if (copyYPlane) {
         row = avif->yuvPlanes[AVIF_CHAN_Y];
         rowBytes = avif->yuvRowBytes[AVIF_CHAN_Y];
     } else {
-        row = rgb.pixels;
-        rowBytes = rgb.rowBytes;
+        row = rgbView.pixels;
+        rowBytes = rgbView.rowBytes;
     }
-    for (uint32_t y = 0; y < avif->height; ++y) {
+    for (uint32_t y = 0; y < height; ++y) {
         rowPointers[y] = row;
         row += rowBytes;
-    }
-
-    if (avif->transformFlags & AVIF_TRANSFORM_CLAP) {
-        avifCropRect cropRect;
-        avifDiagnostics diag;
-        if (avifCropRectFromCleanApertureBox(&cropRect, &avif->clap, avif->width, avif->height, &diag) &&
-            (cropRect.x != 0 || cropRect.y != 0 || cropRect.width != avif->width || cropRect.height != avif->height)) {
-            // TODO: https://github.com/AOMediaCodec/libavif/issues/2427 - Implement.
-            fprintf(stderr,
-                    "Warning: Clean Aperture values were ignored, the output image was NOT cropped to rectangle {%u,%u,%u,%u}\n",
-                    cropRect.x,
-                    cropRect.y,
-                    cropRect.width,
-                    cropRect.height);
-        }
-    }
-    if (avifImageGetExifOrientationFromIrotImir(avif) != 1) {
-        // TODO: https://github.com/AOMediaCodec/libavif/issues/2427 - Rotate the samples.
-        fprintf(stderr,
-                "Warning: Orientation %u was ignored, the output image was NOT rotated or mirrored\n",
-                avifImageGetExifOrientationFromIrotImir(avif));
     }
 
     if (rgbDepth > 8) {
@@ -871,6 +889,6 @@ cleanup:
     if (rowPointers) {
         free(rowPointers);
     }
-    avifRGBImageFreePixels(&rgb);
+    avifRGBImageFreePixels(&rgbData);
     return writeResult;
 }

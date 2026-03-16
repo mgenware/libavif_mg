@@ -426,7 +426,7 @@ avifResult avifImageAddUUIDProperty(avifImage * image, const uint8_t uuid[16], c
 
 avifResult avifImageAllocatePlanes(avifImage * image, avifPlanesFlags planes)
 {
-    if (image->width == 0 || image->height == 0) {
+    if (image->width == 0 || image->height == 0 || image->depth == 0 || image->depth > 16) {
         return AVIF_RESULT_INVALID_ARGUMENT;
     }
     const uint32_t channelSize = avifImageUsesU16(image) ? 2 : 1;
@@ -715,6 +715,9 @@ void avifRGBImageSetDefaults(avifRGBImage * rgb, const avifImage * image)
 avifResult avifRGBImageAllocatePixels(avifRGBImage * rgb)
 {
     avifRGBImageFreePixels(rgb);
+    if (rgb->width == 0 || rgb->height == 0) {
+        return AVIF_RESULT_INVALID_ARGUMENT;
+    }
     const uint32_t pixelSize = avifRGBImagePixelSize(rgb);
     if (rgb->width > UINT32_MAX / pixelSize) {
         return AVIF_RESULT_INVALID_ARGUMENT;

@@ -98,8 +98,10 @@ void avifSetTileConfiguration(int threads, uint32_t width, uint32_t height, int 
         // number of threads would result in a compression penalty without much benefit.
         const uint32_t kMinTileArea = 512 * 512;
         const uint32_t kMaxTiles = 32;
-        uint32_t imageArea = width * height;
-        uint32_t tiles = (imageArea + kMinTileArea - 1) / kMinTileArea;
+        // AV1 requires width <= 65536 and height <= 65536, so their product fits
+        // in uint64_t and the resulting tile count fits in uint32_t.
+        const uint64_t imageArea = (uint64_t)width * height;
+        uint32_t tiles = (uint32_t)((imageArea + kMinTileArea - 1) / kMinTileArea);
         if (tiles > kMaxTiles) {
             tiles = kMaxTiles;
         }
@@ -1343,7 +1345,7 @@ static avifResult avifEncoderCreateBitDepthExtensionItems(avifEncoder * encoder,
     AVIF_ASSERT_OR_RETURN(colorItemID < bitDepthExtensionColorItemId);
     avifEncoderItem * colorItem = avifEncoderDataFindItemByID(encoder->data, colorItemID);
     AVIF_ASSERT_OR_RETURN(colorItem != NULL);
-    AVIF_ASSERT_OR_RETURN(colorItem->dimgFromID == 0); // Our internal API only allows one dimg value per item.
+    AVIF_ASSERT_OR_RETURN(colorItem->dimgFromID == 0); // The internal API only allows one dimg value per item.
     colorItem->dimgFromID = sampleTransformItemID;
     bitDepthExtensionColorItem->dimgFromID = sampleTransformItemID;
 
@@ -1391,6 +1393,7 @@ static avifResult avifImageCreateAllocate(avifImage ** sampleTransformedImage, c
 // Finds the encoded base image and decodes it. Callers of this function must free
 // *codec and *decodedBaseImage if not null, whether the function succeeds or not.
 static avifResult avifEncoderDecodeSatoBaseImage(avifEncoder * encoder,
+                                                 uint32_t cellIndex,
                                                  const avifImage * original,
                                                  uint32_t numBits,
                                                  avifPlanesFlag planes,
@@ -1411,8 +1414,11 @@ static avifResult avifEncoderDecodeSatoBaseImage(avifEncoder * encoder,
             (item->itemCategory != AVIF_ITEM_ALPHA || planes != AVIF_PLANES_A)) {
             continue;
         }
+        if (item->cellIndex != cellIndex) {
+            continue;
+        }
 
-        AVIF_ASSERT_OR_RETURN(item->encodeOutput != NULL); // TODO: Support grids?
+        AVIF_ASSERT_OR_RETURN(item->encodeOutput != NULL);
         AVIF_ASSERT_OR_RETURN(item->encodeOutput->samples.count == 1);
         AVIF_ASSERT_OR_RETURN(item->encodeOutput->samples.sample[0].data.size != 0);
         AVIF_ASSERT_OR_RETURN(sample.data.size == 0); // There should be only one base item.
@@ -1493,7 +1499,7 @@ static avifResult avifEncoderCreateSatoImage(avifEncoder * encoder,
             AVIF_CHECKRES(avifImageCreateAllocate(sampleTransformedImage, image, 8, planes));
             avifCodec * codec = NULL;
             avifImage * decodedBaseImage = NULL;
-            avifResult result = avifEncoderDecodeSatoBaseImage(encoder, image, 12, planes, &codec, &decodedBaseImage);
+            avifResult result = avifEncoderDecodeSatoBaseImage(encoder, item->cellIndex, image, 12, planes, &codec, &decodedBaseImage);
             if (result == AVIF_RESULT_OK) {
                 // decoded = main*16+hidden-128 so hidden = clamp_8b(original-main*16+128). Postfix notation.
                 const avifSampleTransformToken tokens[] = { { AVIF_SAMPLE_TRANSFORM_INPUT_IMAGE_ITEM_INDEX, 0, /*inputImageItemIndex=*/1 },
@@ -1542,7 +1548,7 @@ static avifResult avifEncoderCreateBitDepthExtensionImage(avifEncoder * encoder,
 
 static avifCodecType avifEncoderGetCodecType(const avifEncoder * encoder)
 {
-    // TODO(yguyon): Rework when AVIF_CODEC_CHOICE_AUTO can be AVM
+    // This asserts that images cannot be encoded with AVM unless AVIF_CODEC_CHOICE_AVM is explicitly selected.
     assert((encoder->codecChoice != AVIF_CODEC_CHOICE_AUTO) ||
            (strcmp(avifCodecName(encoder->codecChoice, AVIF_CODEC_FLAG_CAN_ENCODE), "avm") != 0));
     return avifCodecTypeFromChoice(encoder->codecChoice, AVIF_CODEC_FLAG_CAN_ENCODE);
@@ -1616,8 +1622,14 @@ static avifResult avifValidateGrid(uint32_t gridCols,
     }
     const uint32_t tileWidth = firstCell->width;
     const uint32_t tileHeight = firstCell->height;
-    const uint32_t gridWidth = avifGridWidth(gridCols, firstCell, bottomRightCell);
-    const uint32_t gridHeight = avifGridHeight(gridRows, firstCell, bottomRightCell);
+    if ((tileWidth > 65536) || (tileHeight > 65536)) {
+        avifDiagnosticsPrintf(diag,
+                              "the first %s cell has invalid dimensions for AV1: %ux%u",
+                              validateGainMap ? "gain map" : "image",
+                              tileWidth,
+                              tileHeight);
+        return AVIF_RESULT_INVALID_ARGUMENT;
+    }
     for (uint32_t cellIndex = 0; cellIndex < cellCount; ++cellIndex) {
         const avifImage * cellImage = cellImages[cellIndex];
         if (validateGainMap) {
@@ -1678,6 +1690,8 @@ static avifResult avifValidateGrid(uint32_t gridCols,
                               bottomRightCell->height);
         return AVIF_RESULT_INVALID_IMAGE_GRID;
     }
+    const uint32_t gridWidth = avifGridWidth(gridCols, firstCell, bottomRightCell);
+    const uint32_t gridHeight = avifGridHeight(gridRows, firstCell, bottomRightCell);
     if ((cellCount > 1) && !avifAreGridDimensionsValid(firstCell->yuvFormat, gridWidth, gridHeight, tileWidth, tileHeight, diag)) {
         return AVIF_RESULT_INVALID_IMAGE_GRID;
     }
@@ -1750,7 +1764,6 @@ static avifResult avifEncoderAddImageInternal(avifEncoder * encoder,
     if (hasGainMap) {
         // AVIF supports 16-bit images through sample transforms used as bit depth extensions,
         // but this is not implemented for gain maps for now. Stick to at most 12 bits.
-        // TODO(yguyon): Implement 16-bit gain maps.
         AVIF_CHECKERR(firstCell->gainMap->image->depth == 8 || firstCell->gainMap->image->depth == 10 ||
                           firstCell->gainMap->image->depth == 12,
                       AVIF_RESULT_UNSUPPORTED_DEPTH);
@@ -1951,8 +1964,9 @@ static avifResult avifEncoderAddImageInternal(avifEncoder * encoder,
             encoder->sampleTransformRecipe == AVIF_SAMPLE_TRANSFORM_BIT_DEPTH_EXTENSION_12B_4B ||
             encoder->sampleTransformRecipe == AVIF_SAMPLE_TRANSFORM_BIT_DEPTH_EXTENSION_12B_8B_OVERLAP_4B) {
             // For now, only 16-bit depth is supported.
-            AVIF_ASSERT_OR_RETURN(firstCell->depth == 16);
-            AVIF_CHECKERR(!firstCell->gainMap, AVIF_RESULT_NOT_IMPLEMENTED); // TODO(yguyon): Implement 16-bit HDR
+            AVIF_CHECKERR(firstCell->depth == 16, AVIF_RESULT_NOT_IMPLEMENTED);
+            // For now, gain maps are not supported in the same file as Sample Transforms ('altr' group conflict).
+            AVIF_CHECKERR(!firstCell->gainMap, AVIF_RESULT_NOT_IMPLEMENTED);
             AVIF_CHECKRES(avifEncoderCreateBitDepthExtensionItems(encoder, gridCols, gridRows, gridWidth, gridHeight, colorItemID));
         } else {
             AVIF_CHECKERR(encoder->sampleTransformRecipe == AVIF_SAMPLE_TRANSFORM_NONE, AVIF_RESULT_NOT_IMPLEMENTED);
@@ -2117,10 +2131,10 @@ static avifResult avifEncoderAddImageInternal(avifEncoder * encoder,
         }
     }
 
-    avifCodecSpecificOptionsClear(encoder->csOptions);
     avifEncoderFrame * frame = (avifEncoderFrame *)avifArrayPush(&encoder->data->frames);
     AVIF_CHECKERR(frame != NULL, AVIF_RESULT_OUT_OF_MEMORY);
     frame->durationInTimescales = durationInTimescales;
+    avifCodecSpecificOptionsClear(encoder->csOptions);
     return AVIF_RESULT_OK;
 }
 
@@ -2281,7 +2295,7 @@ static avifResult avifEncoderWriteMediaDataBox(avifEncoder * encoder,
                         continue;
                     }
 
-                    // TODO: Offer the ability for a user to specify which grid cell should be written first.
+                    // There is no way to select which grid cell should be written first for now.
                     avifEncoderItem * item = currentItems->ref[itemIndex];
                     if (item->encodeOutput->samples.count <= layerIndex) {
                         // We've already written all samples of this item
@@ -2637,7 +2651,7 @@ static avifResult avifEncoderWriteMiniBox(avifEncoder * encoder, avifRWStream * 
 
     if (floatFlag) {
         // bit(2) bit_depth_log2_minus4;
-        AVIF_ASSERT_OR_RETURN(AVIF_FALSE);
+        AVIF_ASSERT_NOT_REACHED_OR_RETURN;
     } else {
         AVIF_CHECKRES(avifRWStreamWriteBits(s, image->depth > 8, 1)); // bit(1) high_bit_depth_flag;
         if (image->depth > 8) {
@@ -2705,7 +2719,7 @@ static avifResult avifEncoderWriteMiniBox(avifEncoder * encoder, avifRWStream * 
             AVIF_CHECKRES(avifRWStreamWriteBits(s, gainmapFloatFlag, 1)); // bit(1) gainmap_float_flag;
             if (gainmapFloatFlag) {
                 // bit(2) gainmap_bit_depth_log2_minus4;
-                AVIF_ASSERT_OR_RETURN(AVIF_FALSE);
+                AVIF_ASSERT_NOT_REACHED_OR_RETURN;
             } else {
                 AVIF_CHECKRES(avifRWStreamWriteBits(s, gainmap->depth > 8, 1)); // bit(1) gainmap_high_bit_depth_flag;
                 if (gainmap->depth > 8) {
@@ -3357,9 +3371,6 @@ avifResult avifEncoderFinish(avifEncoder * encoder, avifRWData * output)
             // * This is an image sequence, but this file should still be a valid single-image avif,
             //   so there must still be a primary item pointing at a sync sample. Since the first
             //   frame of the image sequence is guaranteed to be a sync sample, it is chosen here.
-            //
-            // TODO: Offer the ability for a user to specify which frame in the sequence should
-            //       become the primary item's image, and force that frame to be a keyframe.
             contentSize = (uint32_t)item->encodeOutput->samples.sample[0].data.size;
         }
 

@@ -30,15 +30,17 @@ jobs:
             gcc: 14
 
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-linux
         with:
           codec-aom: "LOCAL"
           codec-dav1d: ${{ matrix.also-enable-av1-codecs }}
-          codec-rav1e: ${{ matrix.also-enable-av1-codecs }}
+          codec-svt: ${{ matrix.also-enable-av1-codecs }}
           extra-cache-key: ${{ matrix.also-enable-av1-codecs }}
           gcc-version: ${{ matrix.gcc }}
+          libjpeg-turbo: "SYSTEM"
           libyuv: "LOCAL"
+          zlibpng: "SYSTEM"
 
       - name: Prepare libavif (cmake)
         # CMake 4.0.0 removed compatibility with CMake < 3.5. Add
@@ -48,8 +50,8 @@ jobs:
           -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF
           -DAVIF_CODEC_AVM=LOCAL
+          -DAVIF_CODEC_AOM=${{ matrix.also-enable-av1-codecs }}
           -DAVIF_CODEC_DAV1D=${{ matrix.also-enable-av1-codecs }}
-          -DAVIF_CODEC_RAV1E=${{ matrix.also-enable-av1-codecs }}
           -DAVIF_CODEC_SVT=${{ matrix.also-enable-av1-codecs }}
           -DAVIF_LIBYUV=LOCAL
           -DAVIF_LIBSHARPYUV=LOCAL

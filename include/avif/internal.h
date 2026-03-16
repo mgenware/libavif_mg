@@ -62,8 +62,14 @@ static inline void avifBreakOnError()
 // AVIF_ASSERT_OR_RETURN() can be used instead of assert() for extra security in release builds.
 #ifdef NDEBUG
 #define AVIF_ASSERT_OR_RETURN(A) AVIF_CHECKERR((A), AVIF_RESULT_INTERNAL_ERROR)
+#define AVIF_ASSERT_NOT_REACHED_OR_RETURN  \
+    do {                                   \
+        avifBreakOnError();                \
+        return AVIF_RESULT_INTERNAL_ERROR; \
+    } while (0)
 #else
 #define AVIF_ASSERT_OR_RETURN(A) assert(A)
+#define AVIF_ASSERT_NOT_REACHED_OR_RETURN assert(0);
 #endif
 
 // ---------------------------------------------------------------------------
@@ -591,12 +597,10 @@ typedef void (*avifCodecDestroyInternalFunc)(struct avifCodec * codec);
 
 typedef struct avifCodec
 {
-    avifCodecSpecificOptions * csOptions; // Contains codec-specific key/value pairs for advanced tuning.
-                                          // If a codec uses a value, it must mark it as used.
-                                          // This array is NOT owned by avifCodec.
-    struct avifCodecInternal * internal;  // up to each codec to use how it wants
-                                          //
-    avifDiagnostics * diag;               // Shallow copy; owned by avifEncoder or avifDecoder
+    const avifCodecSpecificOptions * csOptions; // Contains codec-specific key/value pairs for advanced tuning.
+                                                // This array is NOT owned by avifCodec.
+    struct avifCodecInternal * internal;        // up to each codec to use how it wants
+    avifDiagnostics * diag;                     // Shallow copy; owned by avifEncoder or avifDecoder
 
     // Decoder options (for getNextImage):
     int maxThreads;               // See avifDecoder::maxThreads.
@@ -809,7 +813,7 @@ void avifGainMapSetDefaults(avifGainMap * gainMap);
 // Uses a histogram, with outliers defined as having at least one empty bucket between them
 // and the rest of the distribution. Discards at most 0.1% of values.
 // Removing outliers helps with accuracy/compression.
-avifResult avifFindMinMaxWithoutOutliers(const float * gainMapF, int numPixels, float * rangeMin, float * rangeMax);
+avifResult avifFindMinMaxWithoutOutliers(const float * gainMapF, size_t numPixels, float * rangeMin, float * rangeMax);
 
 avifResult avifGainMapValidateMetadata(const avifGainMap * gainMap, avifDiagnostics * diag);
 

@@ -26,15 +26,17 @@ jobs:
             gcc: 14
 
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-linux
         id: setup
         with:
           codec-aom: "LOCAL"
           codec-dav1d: "LOCAL"
           gcc-version: ${{ matrix.gcc }}
+          libjpeg-turbo: "SYSTEM"
           libxml2: "LOCAL"
           libyuv: "LOCAL"
+          zlibpng: "SYSTEM"
       - name: Build mp4box
         if: steps.setup.outputs.ext-cache-hit != 'true'
         working-directory: ./ext
@@ -60,7 +62,7 @@ jobs:
       # See https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts
       - name: Archive golden tests output for debugging
         if: failure()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: golden-tests-output
           path: ${{ runner.temp }}/golden_tests/**/*

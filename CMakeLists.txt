@@ -22,10 +22,16 @@ endif()
 # New in CMake version 3.30. FetchContent_Populate(<name>) is deprecated, call
 # FetchContent_MakeAvailable(<name>) instead.
 if(POLICY CMP0169)
-    cmake_policy(SET CMP0169 OLD)
+    cmake_policy(SET CMP0169 NEW)
 endif()
 
-project(libavif LANGUAGES C VERSION 1.3.0)
+# Disallow MSVC for ASM.
+# https://cmake.org/cmake/help/latest/policy/CMP0194.html
+if(POLICY CMP0194)
+    cmake_policy(SET CMP0194 NEW)
+endif()
+
+project(libavif LANGUAGES C VERSION 1.4.0)
 
 # The root directory of the avif source
 set(AVIF_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -61,7 +67,7 @@ endif()
 #   If the source code was changed, but there were no interface changes:
 #     Increment PATCH.
 set(LIBRARY_VERSION_MAJOR 16)
-set(LIBRARY_VERSION_MINOR 3)
+set(LIBRARY_VERSION_MINOR 4)
 set(LIBRARY_VERSION_PATCH 0)
 set(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY_VERSION_PATCH}")
 set(LIBRARY_SOVERSION ${LIBRARY_VERSION_MAJOR})
@@ -98,6 +104,7 @@ set_codec_option(AOM "AOM" "encoding/decoding" " (see AVIF_CODEC_AOM_DECODE/AVIF
 set_codec_option(DAV1D "dav1d" "decoding" "")
 set_codec_option(LIBGAV1 "libgav1" "decoding" "")
 set_codec_option(RAV1E "rav1e" "encoding" "")
+option(AVIF_OPTIMIZE_RAV1E_FOR_SIZE "Overrides rav1e's release setting to optimize for size" OFF)
 set_codec_option(SVT "SVT-AV1" "encoding" "")
 set_codec_option(AVM "AVM (AV2)" "encoding/decoding" " (EXPERIMENTAL)")
 
@@ -341,7 +348,6 @@ if(AVIF_ENABLE_COVERAGE)
         target_compile_options(avif PUBLIC $<BUILD_INTERFACE:-fprofile-instr-generate -fcoverage-mapping -O0>)
         set(CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} "-fprofile-instr-generate -fcoverage-mapping")
     else()
-        # TODO: Add support for other compilers
         message(WARNING "libavif: Ignoring request for coverage (AVIF_ENABLE_COVERAGE); only clang is currently supported.")
         set(AVIF_ENABLE_COVERAGE OFF)
     endif()
@@ -477,20 +483,20 @@ if(AVIF_CODEC_RAV1E_ENABLED)
     target_compile_definitions(avif_obj PRIVATE -DAVIF_CODEC_RAV1E=1)
     target_sources(avif_obj PRIVATE src/codec_rav1e.c)
 
-    # Unfortunately, rav1e requires a few more libraries
-    # first check that RAV1E_LIBRARIES hasn't been populated by the LocalRav1e module
-    if(NOT RAV1E_LIBRARIES)
-        if(WIN32)
-            target_link_libraries(rav1e::rav1e INTERFACE ntdll.lib userenv.lib ws2_32.lib bcrypt.lib)
-        elseif(UNIX AND NOT APPLE)
-            target_link_libraries(rav1e::rav1e INTERFACE ${CMAKE_DL_LIBS}) # for backtrace
-        endif()
-    endif()
-
     avif_target_link_library(rav1e::rav1e)
 
     message(STATUS "libavif: Codec enabled: rav1e (encode)")
     set(AVIF_PKG_CONFIG_EXTRA_REQUIRES_PRIVATE "${AVIF_PKG_CONFIG_EXTRA_REQUIRES_PRIVATE} rav1e")
+endif()
+
+if(AVIF_CODEC_AVM)
+    # Avoid the following error:
+    #   CMake Error: Error required internal CMake variable not set, cmake may not be built correctly.
+    #   Missing variable is: CMAKE_ASM_COMPILE_OBJECT
+    # For some reason this must be done before check_avif_option(AVIF_CODEC_AOM TARGET aom PKG_NAME aom).
+    # See also https://gitlab.kitware.com/cmake/cmake/-/issues/25042.
+    # Enable ASM before NASM in SVT-AV1.
+    enable_language(ASM)
 endif()
 
 check_avif_option(AVIF_CODEC_SVT TARGET SvtAv1Enc PKG_NAME svt)
@@ -534,20 +540,14 @@ if(AVIF_CODEC_AOM_ENABLED)
     endif()
 endif()
 
-check_avif_option(AVIF_CODEC_AVM TARGET aom PKG_NAME avm)
+check_avif_option(AVIF_CODEC_AVM TARGET avm PKG_NAME avm)
 if(AVIF_CODEC_AVM_ENABLED)
     message(WARNING "libavif: AV2 support with avm is experimental. Only use for testing.")
-
-    # The avm repository is a fork of aom and inherited a lot of folders, files and build artifacts named the same way.
-    # Having both dependencies at the same time generates conflicts in includes, binary lookups etc.
-    if(AVIF_CODEC_AOM_ENABLED)
-        message(FATAL_ERROR "libavif: aom conflicts with avm, bailing out")
-    endif()
 
     target_compile_definitions(avif_obj PUBLIC -DAVIF_CODEC_AVM=1)
     target_sources(avif_obj PRIVATE src/codec_avm.c)
 
-    avif_target_link_library(aom)
+    avif_target_link_library(avm)
     # C++ is needed because of tensorflow-lite.
     set(AVIF_LIB_USE_CXX ON)
 

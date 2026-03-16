@@ -78,7 +78,7 @@ extern "C" {
 // downstream projects to do greater-than preprocessor checks on AVIF_VERSION
 // to leverage in-development code without breaking their stable builds.
 #define AVIF_VERSION_MAJOR 1
-#define AVIF_VERSION_MINOR 3
+#define AVIF_VERSION_MINOR 4
 #define AVIF_VERSION_PATCH 0
 #define AVIF_VERSION_DEVEL 1
 #define AVIF_VERSION \
@@ -1234,6 +1234,11 @@ typedef enum avifImageContentTypeFlag
     AVIF_IMAGE_CONTENT_GAIN_MAP = (1 << 2),
     AVIF_IMAGE_CONTENT_ALL = AVIF_IMAGE_CONTENT_COLOR_AND_ALPHA | AVIF_IMAGE_CONTENT_GAIN_MAP,
 
+    // Mostly used for bit depth extensions to go beyond the underlying codec capability
+    // (e.g. 16-bit AVIF). Not part of AVIF_IMAGE_CONTENT_ALL as this is a rare use case.
+    // Has no effect without AVIF_IMAGE_CONTENT_COLOR_AND_ALPHA.
+    AVIF_IMAGE_CONTENT_SAMPLE_TRANSFORMS = (1 << 3),
+
     AVIF_IMAGE_CONTENT_DECODE_DEFAULT = AVIF_IMAGE_CONTENT_COLOR_AND_ALPHA,
 } avifImageContentTypeFlag;
 typedef uint32_t avifImageContentTypeFlags;
@@ -1373,6 +1378,8 @@ typedef struct avifDecoder
     // --------------------------------------------------------------------------------------------
 
     // Image content to decode (if present). Defaults to AVIF_IMAGE_CONTENT_DECODE_DEFAULT.
+    // The value is only taken into account when calling avifDecoderRead*(), avifDecoderSetSource(),
+    // avifDecoderParse(), or avifDecoderReset().
     avifImageContentTypeFlags imageContentToDecode; // Changeable decoder setting.
 
     // Version 1.2.0 ends here. Add any new members after this line.
@@ -1439,17 +1446,16 @@ AVIF_API avifResult avifDecoderNthImageTiming(const avifDecoder * decoder, uint3
 // function can be called next to retrieve the number of top rows that can be immediately accessed
 // from the luma plane of decoder->image, and alpha if any. The corresponding rows from the chroma planes,
 // if any, can also be accessed (half rounded up if subsampled, same number of rows otherwise).
-// If a gain map is present and  (imageContentToDecode & AVIF_IMAGE_CONTENT_GAIN_MAP) is nonzero,
-// the gain map's planes can also be accessed in the same way.
-// If the gain map's height is different from the main image, then the number of available gain map
-// rows is at least:
-// roundf((float)decoded_row_count / decoder->image->height * decoder->image->gainMap.image->height)
+// If a gain map is present and (imageContentToDecode & AVIF_IMAGE_CONTENT_GAIN_MAP) was nonzero when
+// avifDecoderNextImage() or avifDecoderNthImage() was called, the gain map's planes can also be accessed
+// in the same way. If the gain map's height is different from the main image, then the number of
+// available gain map rows is at least:
+//   roundf((float)decoded_row_count / decoder->image->height * decoder->image->gainMap.image->height)
 // When gain map scaling is needed, callers might choose to use a few less rows depending on how many rows
 // are needed by the scaling algorithm, to avoid the last row(s) changing when more data becomes available.
 // decoder->allowIncremental must be set to true before calling avifDecoderNextImage() or
 // avifDecoderNthImage(). Returns decoder->image->height when the last call to avifDecoderNextImage() or
 // avifDecoderNthImage() returned AVIF_RESULT_OK. Returns 0 in all other cases.
-// WARNING: Experimental feature.
 AVIF_API uint32_t avifDecoderDecodedRowCount(const avifDecoder * decoder);
 
 // ---------------------------------------------------------------------------
@@ -1527,7 +1533,7 @@ typedef struct avifEncoder
     // played back `n + 1` times. Defaults to AVIF_REPETITION_COUNT_INFINITE.
     int repetitionCount;
 
-    // EXPERIMENTAL: A non-zero value indicates a layered (progressive) image.
+    // A non-zero value indicates a layered (progressive) image.
     // Range: [0 - (AVIF_MAX_AV1_LAYER_COUNT-1)].
     // To encode a progressive image, set `extraLayerCount` to the number of extra images, then call
     // `avifEncoderAddImage()` or `avifEncoderAddImageGrid()` exactly `encoder->extraLayerCount+1` times.
@@ -1596,7 +1602,7 @@ typedef struct avifEncoder
     // Encode quality for the gain map image if present, in [AVIF_QUALITY_WORST - AVIF_QUALITY_BEST].
     int qualityGainMap; // Changeable encoder setting.
 
-    // Version 1.2.0 ends here. Add any new members after this line.
+    // Version 1.2.0 ends here.
     // --------------------------------------------------------------------------------------------
 
     // Only used when encoding an image sequence (animated image). In seconds since midnight,
@@ -1610,6 +1616,9 @@ typedef struct avifEncoder
 
     // Perform extra steps at encoding and decoding to extend AV1 features using bundled additional image items.
     avifSampleTransformRecipe sampleTransformRecipe; // Changeable encoder setting.
+
+    // Version 1.4.0 ends here. Add any new members after this line.
+    // --------------------------------------------------------------------------------------------
 } avifEncoder;
 
 // Creates an encoder initialized with default settings values.

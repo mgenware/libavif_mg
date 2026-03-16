@@ -170,7 +170,11 @@ static avifResult svtCodecEncodeImage(avifCodec * codec,
 #else
         svt_config->logical_processors = encoder->maxThreads;
 #endif
+#if SVT_AV1_CHECK_VERSION(4, 0, 0)
+        svt_config->aq_mode = 2;
+#else
         svt_config->enable_adaptive_quantization = 2;
+#endif
         // disable 2-pass
 #if SVT_AV1_CHECK_VERSION(0, 9, 0)
         svt_config->rc_stats_buffer = (SvtAv1FixedBuf) { NULL, 0 };
@@ -224,7 +228,7 @@ static avifResult svtCodecEncodeImage(avifCodec * codec,
 
 #if SVT_AV1_CHECK_VERSION(0, 9, 1)
         for (uint32_t i = 0; i < codec->csOptions->count; ++i) {
-            avifCodecSpecificOption * entry = &codec->csOptions->entries[i];
+            const avifCodecSpecificOption * entry = &codec->csOptions->entries[i];
             if (svt_av1_enc_parse_parameter(svt_config, entry->key, entry->value) < 0) {
                 avifDiagnosticsPrintf(codec->diag, "Invalid value for %s: %s.", entry->key, entry->value);
                 result = AVIF_RESULT_INVALID_CODEC_SPECIFIC_OPTION;
@@ -241,8 +245,12 @@ static avifResult svtCodecEncodeImage(avifCodec * codec,
 
 #if SVT_AV1_CHECK_VERSION(3, 0, 0)
         svt_config->lossless = quality == AVIF_QUALITY_LOSSLESS;
-        // TODO: https://gitlab.com/AOMediaCodec/SVT-AV1/-/issues/2245 - Enable when resolved.
-        // svt_config->avif = (addImageFlags & AVIF_ADD_IMAGE_FLAG_SINGLE) != 0;
+#endif
+
+#if SVT_AV1_CHECK_VERSION(4, 0, 0)
+        // Although the `avif` option was added in v3.0.0, it had a serious bug that was not fixed
+        // until v4.0.0. See https://gitlab.com/AOMediaCodec/SVT-AV1/-/issues/2245.
+        svt_config->avif = (addImageFlags & AVIF_ADD_IMAGE_FLAG_SINGLE) != 0;
 #endif
 
         res = svt_av1_enc_set_parameter(codec->internal->svt_encoder, svt_config);
@@ -266,22 +274,32 @@ static avifResult svtCodecEncodeImage(avifCodec * codec,
     if (alpha) {
         input_picture_buffer->y_stride = image->alphaRowBytes / bytesPerPixel;
         input_picture_buffer->luma = image->alphaPlane;
-        input_buffer->n_filled_len = image->alphaRowBytes * image->height;
+        const size_t alphaSize = (size_t)image->alphaRowBytes * image->height;
+        if (alphaSize > UINT32_MAX) {
+            goto cleanup;
+        }
+        input_buffer->n_filled_len = (uint32_t)alphaSize;
 
 #if SVT_AV1_CHECK_VERSION(1, 8, 0)
         // Simulate 4:2:0 UV planes. SVT-AV1 does not support 4:0:0 samples.
         const uint32_t uvWidth = (image->width + y_shift) >> y_shift;
         const uint32_t uvRowBytes = uvWidth * bytesPerPixel;
-        const uint32_t uvSize = uvRowBytes * uvHeight;
+        const size_t uvSize = (size_t)uvRowBytes * uvHeight;
+        if (uvSize > UINT32_MAX / 2) {
+            goto cleanup;
+        }
+        if (uvSize * 2 > UINT32_MAX - input_buffer->n_filled_len) {
+            goto cleanup;
+        }
         uvPlanes = avifAlloc(uvSize);
         if (uvPlanes == NULL) {
             goto cleanup;
         }
         memset(uvPlanes, 0, uvSize);
         input_picture_buffer->cb = uvPlanes;
-        input_buffer->n_filled_len += uvSize;
+        input_buffer->n_filled_len += (uint32_t)uvSize;
         input_picture_buffer->cr = uvPlanes;
-        input_buffer->n_filled_len += uvSize;
+        input_buffer->n_filled_len += (uint32_t)uvSize;
         input_picture_buffer->cb_stride = uvWidth;
         input_picture_buffer->cr_stride = uvWidth;
 #else
@@ -292,11 +310,23 @@ static avifResult svtCodecEncodeImage(avifCodec * codec,
     } else {
         input_picture_buffer->y_stride = image->yuvRowBytes[0] / bytesPerPixel;
         input_picture_buffer->luma = image->yuvPlanes[0];
-        input_buffer->n_filled_len = image->yuvRowBytes[0] * image->height;
+        const size_t ySize = (size_t)image->yuvRowBytes[0] * image->height;
+        if (ySize > UINT32_MAX) {
+            goto cleanup;
+        }
+        input_buffer->n_filled_len = (uint32_t)ySize;
         input_picture_buffer->cb = image->yuvPlanes[1];
-        input_buffer->n_filled_len += image->yuvRowBytes[1] * uvHeight;
+        const size_t uSize = (size_t)image->yuvRowBytes[1] * uvHeight;
+        if (uSize > UINT32_MAX - input_buffer->n_filled_len) {
+            goto cleanup;
+        }
+        input_buffer->n_filled_len += (uint32_t)uSize;
         input_picture_buffer->cr = image->yuvPlanes[2];
-        input_buffer->n_filled_len += image->yuvRowBytes[2] * uvHeight;
+        const size_t vSize = (size_t)image->yuvRowBytes[2] * uvHeight;
+        if (vSize > UINT32_MAX - input_buffer->n_filled_len) {
+            goto cleanup;
+        }
+        input_buffer->n_filled_len += (uint32_t)vSize;
         input_picture_buffer->cb_stride = image->yuvRowBytes[1] / bytesPerPixel;
         input_picture_buffer->cr_stride = image->yuvRowBytes[2] / bytesPerPixel;
     }

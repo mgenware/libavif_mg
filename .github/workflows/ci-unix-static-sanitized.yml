@@ -27,15 +27,17 @@ jobs:
       CXX: clang++
 
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-linux
         if: runner.os == 'Linux'
         id: setup_linux
         with:
           codec-aom: "LOCAL"
           codec-dav1d: "LOCAL"
-          libyuv: "LOCAL"
           extra-cache-key: ${{ matrix.sanitizer }}
+          libjpeg-turbo: "SYSTEM"
+          libyuv: "LOCAL"
+          zlibpng: "SYSTEM"
       - uses: ./.github/actions/setup-macos
         if: runner.os == 'macOS'
         id: setup_macos
@@ -43,6 +45,9 @@ jobs:
           codec-aom: "LOCAL"
           codec-dav1d: "LOCAL"
           extra-cache-key: ${{ matrix.sanitizer }}
+          libjpeg-turbo: "SYSTEM"
+          libyuv: "LOCAL"
+          zlibpng: "SYSTEM"
       - id: cache-hit
         run: echo "hit=${{ (runner.os == 'Linux' && steps.setup_linux.outputs.ext-cache-hit == 'true') || (runner.os == 'macOS' && steps.setup_macos.outputs.ext-cache-hit == 'true') }}" >> "$GITHUB_OUTPUT"
 
