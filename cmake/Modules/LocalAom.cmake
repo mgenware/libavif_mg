@@ -1,4 +1,4 @@
-set(AVIF_AOM_GIT_TAG v3.13.1)
+set(AVIF_AOM_GIT_TAG v3.13.2)
 
 set(AOM_EXT_SOURCE_DIR "${AVIF_SOURCE_DIR}/ext/aom")
 set(LIB_FILENAME "${AOM_EXT_SOURCE_DIR}/build.libavif/${CMAKE_STATIC_LIBRARY_PREFIX}aom${CMAKE_STATIC_LIBRARY_SUFFIX}")
@@ -70,7 +70,10 @@ else()
     FetchContent_Declare(
         libaom
         EXCLUDE_FROM_ALL
-        URL "https://aomedia.googlesource.com/aom/+archive/${AVIF_AOM_GIT_TAG}.tar.gz"
+        GIT_REPOSITORY "https://aomedia.googlesource.com/aom.git"
+        GIT_TAG ${AVIF_AOM_GIT_TAG}
+        GIT_PROGRESS ON
+        GIT_SHALLOW ON
         UPDATE_COMMAND ""
     )
 
