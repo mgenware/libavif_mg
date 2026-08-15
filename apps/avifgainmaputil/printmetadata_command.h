@@ -16,6 +16,7 @@ class PrintMetadataCommand : public ProgramCommand {
 
  private:
   argparse::ArgValue<std::string> arg_input_filename_;
+  argparse::ArgValue<std::string> arg_output_filename_;
   JobsArgs arg_jobs_;
 };
 

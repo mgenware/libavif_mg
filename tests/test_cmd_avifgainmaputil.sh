@@ -35,6 +35,8 @@ pushd ${TMP_DIR}
   "${AVIFGAINMAPUTIL}" help
 
   "${AVIFGAINMAPUTIL}" printmetadata "${INPUT_AVIF_GAINMAP_SDR}"
+  "${AVIFGAINMAPUTIL}" printmetadata "${INPUT_AVIF_GAINMAP_SDR}" metadata.txt
+  grep -q "Base headroom" metadata.txt
 
   "${AVIFGAINMAPUTIL}" extractgainmap "${INPUT_AVIF_GAINMAP_SDR}" "${AVIF_OUTPUT}" -q 50
   "${AVIFGAINMAPUTIL}" extractgainmap "${INPUT_AVIF_GAINMAP_SDR}" "${JPEG_OUTPUT}"

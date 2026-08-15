@@ -698,13 +698,13 @@ if(AVIF_BUILD_APPS)
     # endif()
     # target_link_libraries(avifenc avif_apps avif avif_enable_warnings)
     add_library(avifdec SHARED apps/avifdec.c)
-    if(WIN32)
-        if(MSVC)
-            target_sources(avifdec PRIVATE apps/utf8.manifest)
-        elseif(MINGW)
-            target_sources(avifdec PRIVATE apps/utf8.rc)
-        endif()
-    endif()
+    # if(WIN32)
+    #     if(MSVC)
+    #         target_sources(avifdec PRIVATE apps/utf8.manifest)
+    #     elseif(MINGW)
+    #         target_sources(avifdec PRIVATE apps/utf8.rc)
+    #     endif()
+    # endif()
     if(AVIF_LIB_USE_CXX)
         set_target_properties(avifdec PROPERTIES LINKER_LANGUAGE "CXX")
     endif()
@@ -712,18 +712,20 @@ if(AVIF_BUILD_APPS)
 
     include(LocalLibargparse)
 
-    # set(AVIFGAINMAPUTIL_SRCS
-    #     apps/avifgainmaputil/avifgainmaputil.cc
-    #     apps/avifgainmaputil/convert_command.cc
-    #     apps/avifgainmaputil/combine_command.cc
-    #     apps/avifgainmaputil/extractgainmap_command.cc
-    #     apps/avifgainmaputil/imageio.cc
-    #     apps/avifgainmaputil/printmetadata_command.cc
-    #     apps/avifgainmaputil/tonemap_command.cc
-    #     apps/avifgainmaputil/program_command.cc
-    #     apps/avifgainmaputil/swapbase_command.cc
-    # )
+    set(AVIFGAINMAPUTIL_SRCS
+        apps/avifgainmaputil/avifgainmaputil.cc
+        # apps/avifgainmaputil/convert_command.cc
+        # apps/avifgainmaputil/combine_command.cc
+        apps/avifgainmaputil/extractgainmap_command.cc
+        apps/avifgainmaputil/printmetadata_command.cc
+        # apps/avifgainmaputil/tonemap_command.cc
+        apps/avifgainmaputil/program_command.cc
+        apps/avifgainmaputil/imageio.cc
+        # apps/avifgainmaputil/swapbase_command.cc
+    )
 
+    # MG: Add avifgainmaputil source files to avifdec project.
+    target_sources(avifdec PRIVATE "${AVIFGAINMAPUTIL_SRCS}")
     # add_executable(avifgainmaputil "${AVIFGAINMAPUTIL_SRCS}")
     # if(WIN32)
     #     if(MSVC)
@@ -732,8 +734,9 @@ if(AVIF_BUILD_APPS)
     #         target_sources(avifgainmaputil PRIVATE apps/utf8.rc)
     #     endif()
     # endif()
-    # set_target_properties(avifgainmaputil PROPERTIES LINKER_LANGUAGE "CXX")
-    # target_link_libraries(avifgainmaputil libargparse avif_apps avif avif_enable_warnings)
+
+    set_target_properties(avifdec PROPERTIES LINKER_LANGUAGE "CXX")
+    target_link_libraries(avifdec libargparse avif_apps avif avif_enable_warnings)
 
     # if(NOT SKIP_INSTALL_APPS AND NOT SKIP_INSTALL_ALL)
     #     install(

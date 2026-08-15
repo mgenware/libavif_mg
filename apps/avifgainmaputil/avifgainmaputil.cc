@@ -1,6 +1,8 @@
 // Copyright 2023 Google LLC
 // SPDX-License-Identifier: BSD-2-Clause
 
+#include "avifgainmaputil.h"
+
 #include <iomanip>
 #include <string>
 #include <vector>
@@ -8,13 +10,13 @@
 #include "argparse.hpp"
 #include "avif/avif.h"
 #include "avifutil.h"
-#include "combine_command.h"
-#include "convert_command.h"
+// #include "combine_command.h"
+// #include "convert_command.h"
 #include "extractgainmap_command.h"
 #include "printmetadata_command.h"
 #include "program_command.h"
-#include "swapbase_command.h"
-#include "tonemap_command.h"
+// #include "swapbase_command.h"
+// #include "tonemap_command.h"
 
 namespace avif {
 namespace {
@@ -75,13 +77,13 @@ void PrintUsage(const std::vector<std::unique_ptr<ProgramCommand>>& commands) {
 }  // namespace
 }  // namespace avif
 
-int main(int argc, char** argv) {
+int avifgainmaputil_main(int argc, char** argv) {
   std::vector<std::unique_ptr<avif::ProgramCommand>> commands;
   commands.emplace_back(std::make_unique<avif::HelpCommand>());
-  commands.emplace_back(std::make_unique<avif::CombineCommand>());
-  commands.emplace_back(std::make_unique<avif::ConvertCommand>());
-  commands.emplace_back(std::make_unique<avif::TonemapCommand>());
-  commands.emplace_back(std::make_unique<avif::SwapBaseCommand>());
+  // commands.emplace_back(std::make_unique<avif::CombineCommand>());
+  // commands.emplace_back(std::make_unique<avif::ConvertCommand>());
+  // commands.emplace_back(std::make_unique<avif::TonemapCommand>());
+  // commands.emplace_back(std::make_unique<avif::SwapBaseCommand>());
   commands.emplace_back(std::make_unique<avif::ExtractGainMapCommand>());
   commands.emplace_back(std::make_unique<avif::PrintMetadataCommand>());
 

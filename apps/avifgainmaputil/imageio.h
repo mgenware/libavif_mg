@@ -21,14 +21,14 @@ avifResult ReadImage(avifImage* image, const std::string& input_filename,
                      avifPixelFormat requested_format, uint32_t requested_depth,
                      bool ignore_profile, bool ignore_gain_map, int jobs);
 
-// Reads an image in avif format given a pre-configured encoder.
-avifResult WriteAvif(const avifImage* image, avifEncoder* encoder,
-                     const std::string& output_filename);
+// // Reads an image in avif format given a pre-configured encoder.
+// avifResult WriteAvif(const avifImage* image, avifEncoder* encoder,
+//                      const std::string& output_filename);
 
-// If grid_cols*grid_rows > 1, splits 'image' into a grid and writes it to an
-// AVIF file. Otherwise, just writes a single AVIF image.
-avifResult WriteAvifGrid(const avifImage* image, int grid_cols, int grid_rows,
-                         avifEncoder* encoder, const std::string& filename);
+// // If grid_cols*grid_rows > 1, splits 'image' into a grid and writes it to an
+// // AVIF file. Otherwise, just writes a single AVIF image.
+// avifResult WriteAvifGrid(const avifImage* image, int grid_cols, int grid_rows,
+//                          avifEncoder* encoder, const std::string& filename);
 
 // Reads an image in avif format given a pre-configured decoder.
 // The image can be accessed at decoder->image.
